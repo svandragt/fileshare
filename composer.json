@@ -1,0 +1,8 @@
+{
+    "scripts": {
+        "serve": "php -S localhost:8000 -t src/ src/router.php"
+    },
+    "require": {
+        "ext-fileinfo": "*"
+    }
+}
