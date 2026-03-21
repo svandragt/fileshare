@@ -2,6 +2,9 @@
 
 A self-hosted file sharing app in a single PHP file. No framework, no Composer dependencies, no database.
 
+<img width="1698" height="1014" alt="image" src="https://github.com/user-attachments/assets/81d5e234-25a7-44a6-9332-623a15235fe9" />
+
+
 ## Features
 
 - Upload files into optional folder paths
