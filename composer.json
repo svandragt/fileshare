@@ -1,6 +1,7 @@
 {
     "scripts": {
-        "serve": "php -S localhost:8000 -t src/ src/router.php"
+        "serve": "php -S localhost:8000 -t src/ src/router.php",
+        "build": "php -d phar.readonly=Off bin/build.php"
     },
     "require": {
         "ext-fileinfo": "*"

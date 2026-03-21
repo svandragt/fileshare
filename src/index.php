@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-define('ROOT',                 dirname(__DIR__));
+$_pharPath = Phar::running(false);
+define('ROOT',                 $_pharPath !== '' ? dirname($_pharPath) : dirname(__DIR__));
 define('UPLOADS_DIR',          ROOT . '/uploads');
 define('DATA_FILE',            ROOT . '/data/files.json');
 define('LOCK_FILE',            ROOT . '/data/.lock');
