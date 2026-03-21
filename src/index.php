@@ -6,7 +6,6 @@ define('UPLOADS_DIR',          ROOT . '/uploads');
 define('DATA_FILE',            ROOT . '/data/files.json');
 define('LOCK_FILE',            ROOT . '/data/.lock');
 define('ENV_FILE',             ROOT . '/.env');
-define('MAX_UPLOAD_BYTES',     50 * 1024 * 1024);
 define('SESSION_IDLE_SECONDS', 3600);
 
 require __DIR__ . '/helpers.php';
@@ -15,9 +14,10 @@ require __DIR__ . '/handlers.php';
 // --- Bootstrap ---
 
 $env = loadEnv();
-define('APP_USERNAME',  $env['USERNAME']    ?? '');
-define('APP_PASSWORD',  $env['PASSWORD']    ?? '');
-define('CRON_SECRET',   $env['CRON_SECRET'] ?? '');
+define('APP_USERNAME',      $env['USERNAME']      ?? '');
+define('APP_PASSWORD',      $env['PASSWORD']      ?? '');
+define('CRON_SECRET',       $env['CRON_SECRET']   ?? '');
+define('MAX_UPLOAD_BYTES',  (int)($env['MAX_UPLOAD_MB'] ?? 50) * 1024 * 1024);
 
 define('CSP_NONCE', base64_encode(random_bytes(16)));
 
