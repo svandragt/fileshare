@@ -9,7 +9,7 @@ Single-file PHP 8.2 fileshare. No framework, no Composer dependencies.
 ## Commands
 
 - `composer serve` — start dev server at `http://localhost:8000` (uses `src/router.php` for clean URL routing)
-- `composer build` — build `dist/fileshare.phar` and `dist/simple.min.css` for production deployment
+- `composer build` — build `dist/fileshare.phar` (self-contained; CSS embedded as data URL)
 - `GET /cron?secret=<CRON_SECRET>` — trigger expiry cleanup; requires `?secret=` matching `CRON_SECRET` in `.env`
 
 ## Architecture
@@ -71,14 +71,13 @@ Also set `upload_max_filesize = 50M` and `post_max_size = 52M` in `php.ini`.
 
 ## PHAR packaging
 
-Run `composer build` to produce `dist/fileshare.phar` and `dist/simple.min.css`. Requires `phar.readonly = Off` on the build machine (not needed on production).
+Run `composer build` to produce `dist/fileshare.phar`. The CSS is embedded as a data URL at build time, so the PHAR is fully self-contained. Requires `phar.readonly = Off` on the build machine (not needed on production).
 
-Deploy by placing both dist files in the same directory alongside `uploads/`, `data/`, and `.env`:
+Deploy by placing the PHAR alongside `uploads/`, `data/`, and `.env`:
 
 ```
 /srv/fileshare/
 ├── fileshare.phar
-├── simple.min.css
 ├── .env
 ├── uploads/
 └── data/
@@ -105,5 +104,3 @@ server {
     }
 }
 ```
-
-`simple.min.css` is served directly by Nginx as a static file. All other requests are handled by PHP-FPM executing the PHAR.

@@ -15,11 +15,31 @@ if (file_exists($outFile)) {
     unlink($outFile);
 }
 
+// Embed CSS as a data URL so the PHAR is fully self-contained
+$cssDataUrl  = 'data:text/css;base64,' . base64_encode(file_get_contents($srcDir . '/simple.min.css'));
+$cssLinkOld  = '<link rel="stylesheet" href="/simple.min.css">';
+$cssLinkNew  = '<link rel="stylesheet" href="' . $cssDataUrl . '">';
+
 $phar = new Phar($outFile);
 $phar->startBuffering();
 
-// Add all src/ files except the dev-only router
-$phar->buildFromDirectory($srcDir, '/^(?!.*router\.php).+$/');
+$iter = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($srcDir, FilesystemIterator::SKIP_DOTS)
+);
+foreach ($iter as $file) {
+    if ($file->getFilename() === 'router.php') {
+        continue;
+    }
+
+    $content      = file_get_contents($file->getPathname());
+    $relativePath = 'src/' . ltrim(substr($file->getPathname(), strlen($srcDir)), '/');
+
+    if (str_ends_with($relativePath, '.php')) {
+        $content = str_replace($cssLinkOld, $cssLinkNew, $content);
+    }
+
+    $phar->addFromString($relativePath, $content);
+}
 
 $stub = <<<'STUB'
 <?php
@@ -32,8 +52,4 @@ $phar->setStub($stub);
 $phar->stopBuffering();
 chmod($outFile, 0755);
 
-// Extract CSS alongside the PHAR so Nginx can serve it as a static file
-copy($srcDir . '/simple.min.css', $outDir . '/simple.min.css');
-
 echo "Built: $outFile\n";
-echo "Copied: $outDir/simple.min.css\n";
