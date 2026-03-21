@@ -39,10 +39,11 @@ PASSWORD=$2y$12$...
 CRON_SECRET=...
 ```
 
-Create the required directories:
+Create the required directories and make them writable by the PHP-FPM user:
 
 ```bash
 mkdir -p uploads data
+chown www-data: uploads data   # replace www-data with your PHP-FPM user if different
 ```
 
 ## Development server
@@ -115,6 +116,7 @@ server {
 > - Enable TLS and configure the `ssl_certificate` / `ssl_certificate_key` directives
 > - Add the `Strict-Transport-Security` header only after TLS is confirmed working
 > - Confirm `uploads/`, `data/`, and `.env` are outside the Nginx `root`
+> - Confirm `uploads/` and `data/` are writable by the PHP-FPM user (`chown www-data: uploads data`)
 > - Set `upload_max_filesize = 50M` and `post_max_size = 52M` in `php.ini`
 
 ## Cron
