@@ -73,7 +73,7 @@
                 <summary>Upload a file</summary>
                 <form class="upload-form" method="post" action="/upload" enctype="multipart/form-data">
                     <?= csrfField() ?>
-                    <label>File
+                    <label>File <small>(max <?= formatBytes(effectiveMaxUploadBytes()) ?>)</small>
                         <input type="file" name="file" required>
                     </label>
                     <label>Folder <small>(optional)</small>

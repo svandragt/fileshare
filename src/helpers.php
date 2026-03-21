@@ -104,6 +104,35 @@ function formatExpiry(?int $ts): string
     return round($diff / 86_400) . 'd';
 }
 
+// --- Upload helpers ---
+
+function phpIniBytes(string $key): int
+{
+    $val = trim((string)ini_get($key));
+    if ($val === '') return PHP_INT_MAX;
+    $last = strtolower($val[-1]);
+    $n    = (int)$val;
+    return match ($last) {
+        'g'     => $n * 1024 * 1024 * 1024,
+        'm'     => $n * 1024 * 1024,
+        'k'     => $n * 1024,
+        default => $n,
+    };
+}
+
+function effectiveMaxUploadBytes(): int
+{
+    return min(MAX_UPLOAD_BYTES, phpIniBytes('upload_max_filesize'), phpIniBytes('post_max_size'));
+}
+
+function formatBytes(int $bytes): string
+{
+    if ($bytes >= 1024 * 1024 * 1024) return round($bytes / (1024 * 1024 * 1024), 1) . ' GB';
+    if ($bytes >= 1024 * 1024)        return round($bytes / (1024 * 1024), 1) . ' MB';
+    if ($bytes >= 1024)               return round($bytes / 1024, 1) . ' KB';
+    return $bytes . ' B';
+}
+
 // --- Output helpers ---
 
 function clearSessionCookie(): void
