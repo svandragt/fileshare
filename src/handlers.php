@@ -1,0 +1,246 @@
+<?php
+declare(strict_types=1);
+
+// --- Auth ---
+
+function isLoggedIn(): bool
+{
+    return !empty($_SESSION['logged_in']);
+}
+
+function requireLogin(): void
+{
+    if (!isLoggedIn()) {
+        header('Location: /');
+        exit;
+    }
+}
+
+function verifyCsrf(): void
+{
+    if (!hash_equals($_SESSION['csrf'], $_POST['csrf'] ?? '')) {
+        http_response_code(403);
+        die('Invalid CSRF token.');
+    }
+}
+
+// --- Route handlers ---
+
+function handleDashboard(): void
+{
+    if (!isLoggedIn()) { renderLogin(); return; }
+    $meta = loadMeta();
+    usort($meta, fn($a, $b) => $b['uploaded'] <=> $a['uploaded']);
+    renderDashboard($meta);
+}
+
+function handleLogin(): void
+{
+    verifyCsrf();
+    if (($_POST['username'] ?? '') === APP_USERNAME && ($_POST['password'] ?? '') === APP_PASSWORD) {
+        $_SESSION['logged_in'] = true;
+        redirect('/');
+    }
+    renderLogin('Invalid credentials.');
+}
+
+function handleLogout(): void
+{
+    session_destroy();
+    redirect('/');
+}
+
+function handleUpload(): void
+{
+    requireLogin();
+    verifyCsrf();
+
+    if (empty($_FILES['file']['name'])) {
+        redirect('/', 'No file selected.');
+    }
+
+    $folder   = sanitizeFolder($_POST['folder'] ?? '');
+    $private  = !empty($_POST['private']);
+    $expiry   = $_POST['expiry'] ?? 'never';
+    $filename = basename($_FILES['file']['name']);
+
+    $targetDir = UPLOADS_DIR . ($folder !== '' ? '/' . $folder : '');
+
+    if (!is_dir($targetDir)) {
+        if (!mkdir($targetDir, 0755, true) && !is_dir($targetDir)) {
+            throw new \RuntimeException(sprintf('Directory "%s" was not created', $targetDir));
+        }
+    }
+
+    $uploadsReal   = realpath(UPLOADS_DIR);
+    $targetDirReal = realpath($targetDir);
+    if ($targetDirReal === false || !str_starts_with($targetDirReal, $uploadsReal)) {
+        redirect('/', 'Invalid folder path.');
+    }
+
+    $filename = autoRename($targetDir, $filename);
+
+    if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetDir . '/' . $filename)) {
+        redirect('/', 'Upload failed.');
+    }
+
+    $relativePath = ($folder !== '' ? $folder . '/' : '') . $filename;
+
+    $meta   = loadMeta();
+    $meta[] = [
+        'path'     => $relativePath,
+        'private'  => $private,
+        'expires'  => expiryTimestamp($expiry),
+        'uploaded' => time(),
+    ];
+    saveMeta($meta);
+
+    redirect('/', 'File uploaded successfully.');
+}
+
+function handleDownload(string $filePath): void
+{
+    $filePath = ltrim($filePath, '/');
+    $meta     = loadMeta();
+    $idx      = findIndex($meta, $filePath);
+
+    if ($idx === false) { http_response_code(404); die('File not found.'); }
+
+    $entry = $meta[$idx];
+
+    if ($entry['expires'] !== null && $entry['expires'] < time()) {
+        http_response_code(410);
+        die('This file has expired.');
+    }
+
+    if ($entry['private'] && !isLoggedIn()) {
+        http_response_code(403);
+        die('This file is private.');
+    }
+
+    $uploadsReal = realpath(UPLOADS_DIR);
+    $fullPath    = realpath(UPLOADS_DIR . '/' . $filePath);
+
+    if ($fullPath === false || !str_starts_with($fullPath, $uploadsReal) || !is_file($fullPath)) {
+        http_response_code(404);
+        die('File not found.');
+    }
+
+    header('Content-Type: ' . (mime_content_type($fullPath) ?: 'application/octet-stream'));
+    header('Content-Disposition: attachment; filename="' . addslashes(basename($fullPath)) . '"');
+    header('Content-Length: ' . filesize($fullPath));
+    readfile($fullPath);
+    exit;
+}
+
+function handleDelete(string $filePath): void
+{
+    requireLogin();
+    verifyCsrf();
+
+    $filePath = ltrim($filePath, '/');
+    $meta     = loadMeta();
+    $idx      = findIndex($meta, $filePath);
+
+    if ($idx !== false) {
+        $uploadsReal = realpath(UPLOADS_DIR);
+        $fullPath    = realpath(UPLOADS_DIR . '/' . $filePath);
+        if ($fullPath !== false && str_starts_with($fullPath, $uploadsReal) && is_file($fullPath)) {
+            unlink($fullPath);
+        }
+        array_splice($meta, $idx, 1);
+        saveMeta($meta);
+    }
+
+    redirect('/');
+}
+
+function handleToggle(string $filePath): void
+{
+    requireLogin();
+    verifyCsrf();
+
+    $filePath = ltrim($filePath, '/');
+    $meta     = loadMeta();
+    $idx      = findIndex($meta, $filePath);
+
+    if ($idx !== false) {
+        $meta[$idx]['private'] = !$meta[$idx]['private'];
+        saveMeta($meta);
+    }
+
+    redirect('/');
+}
+
+function handleExpiry(string $filePath): void
+{
+    requireLogin();
+    verifyCsrf();
+
+    $filePath = ltrim($filePath, '/');
+    $meta     = loadMeta();
+    $idx      = findIndex($meta, $filePath);
+
+    if ($idx !== false) {
+        $meta[$idx]['expires'] = expiryTimestamp($_POST['expiry'] ?? 'never');
+        saveMeta($meta);
+    }
+
+    redirect('/');
+}
+
+function handleCron(): void
+{
+    $meta    = loadMeta();
+    $now     = time();
+    $removed = 0;
+
+    foreach ($meta as $entry) {
+        if ($entry['expires'] !== null && $entry['expires'] < $now) {
+            $uploadsReal = realpath(UPLOADS_DIR);
+            $fullPath    = realpath(UPLOADS_DIR . '/' . $entry['path']);
+            if ($fullPath !== false && str_starts_with($fullPath, $uploadsReal) && is_file($fullPath)) {
+                unlink($fullPath);
+            }
+            $removed++;
+        }
+    }
+
+    $meta = array_filter($meta, fn($e) => $e['expires'] === null || $e['expires'] >= $now);
+    saveMeta($meta);
+
+    header('Content-Type: text/plain');
+    echo "Removed $removed expired file(s).\n";
+    exit;
+}
+
+function notFound(): void
+{
+    http_response_code(404);
+    echo '404 Not Found';
+}
+
+// --- Views ---
+
+function renderLogin(?string $error = null): void
+{
+    $flash = $_SESSION['flash'] ?? null;
+    unset($_SESSION['flash']);
+    include __DIR__ . '/views/login.php';
+}
+
+function renderDashboard(array $meta): void
+{
+    $flash = $_SESSION['flash'] ?? null;
+    unset($_SESSION['flash']);
+
+    // Group by folder (dirname), root files keyed as ''
+    $folders = [];
+    foreach ($meta as $entry) {
+        $dir = dirname($entry['path']);
+        $folders[$dir === '.' ? '' : $dir][] = $entry;
+    }
+    ksort($folders);
+
+    include __DIR__ . '/views/dashboard.php';
+}

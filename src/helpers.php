@@ -1,0 +1,105 @@
+<?php
+declare(strict_types=1);
+
+// --- Environment ---
+
+function loadEnv(): array
+{
+    if (!file_exists(ENV_FILE)) {
+        die('Missing .env file — copy .env.example to .env and set credentials.');
+    }
+    $env = [];
+    foreach (file(ENV_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) continue;
+        [$k, $v] = array_map('trim', explode('=', $line, 2));
+        $env[$k] = $v;
+    }
+    return $env;
+}
+
+// --- Metadata ---
+
+function loadMeta(): array
+{
+    if (!file_exists(DATA_FILE)) return [];
+    return json_decode(file_get_contents(DATA_FILE), true) ?: [];
+}
+
+function saveMeta(array $meta): void
+{
+    file_put_contents(DATA_FILE, json_encode(array_values($meta), JSON_PRETTY_PRINT));
+}
+
+function findIndex(array $meta, string $path): int|false
+{
+    foreach ($meta as $i => $entry) {
+        if ($entry['path'] === $path) return $i;
+    }
+    return false;
+}
+
+// --- Path helpers ---
+
+function sanitizeFolder(string $folder): string
+{
+    $folder = str_replace('\\', '/', $folder);
+    $folder = preg_replace('#\.\.+#', '', $folder);
+    $folder = preg_replace('#[^a-zA-Z0-9/_.\- ]#', '', $folder);
+    return trim($folder, '/');
+}
+
+function autoRename(string $dir, string $filename): string
+{
+    if (!file_exists($dir . '/' . $filename)) return $filename;
+    $ext  = pathinfo($filename, PATHINFO_EXTENSION);
+    $base = pathinfo($filename, PATHINFO_FILENAME);
+    for ($i = 1; ; $i++) {
+        $candidate = $ext ? "$base($i).$ext" : "$base($i)";
+        if (!file_exists($dir . '/' . $candidate)) return $candidate;
+    }
+}
+
+// --- Expiry ---
+
+function expiryTimestamp(string $value): ?int
+{
+    return match ($value) {
+        '1h'  => time() + 3_600,
+        '6h'  => time() + 21_600,
+        '24h' => time() + 86_400,
+        '3d'  => time() + 86_400 * 3,
+        '7d'  => time() + 86_400 * 7,
+        '30d' => time() + 86_400 * 30,
+        default => null,
+    };
+}
+
+function formatExpiry(?int $ts): string
+{
+    if ($ts === null) return '—';
+    $diff = $ts - time();
+    if ($diff <= 0) return 'Expired';
+    if ($diff < 3_600)  return round($diff / 60) . 'm';
+    if ($diff < 86_400) return round($diff / 3_600) . 'h';
+    return round($diff / 86_400) . 'd';
+}
+
+// --- Output helpers ---
+
+function redirect(string $to, ?string $flash = null): never
+{
+    if ($flash !== null) $_SESSION['flash'] = $flash;
+    header('Location: ' . $to);
+    exit;
+}
+
+function h(string $s): string
+{
+    return htmlspecialchars($s, ENT_QUOTES | ENT_HTML5);
+}
+
+function csrfField(): string
+{
+    return '<input type="hidden" name="csrf" value="' . h($_SESSION['csrf']) . '">';
+}
