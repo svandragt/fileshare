@@ -1,11 +1,13 @@
 <?php
 declare(strict_types=1);
 
-define('ROOT',        dirname(__DIR__));
-define('UPLOADS_DIR', ROOT . '/uploads');
-define('DATA_FILE',   ROOT . '/data/files.json');
-define('LOCK_FILE',   ROOT . '/data/.lock');
-define('ENV_FILE',    ROOT . '/.env');
+define('ROOT',                 dirname(__DIR__));
+define('UPLOADS_DIR',          ROOT . '/uploads');
+define('DATA_FILE',            ROOT . '/data/files.json');
+define('LOCK_FILE',            ROOT . '/data/.lock');
+define('ENV_FILE',             ROOT . '/.env');
+define('MAX_UPLOAD_BYTES',     50 * 1024 * 1024);
+define('SESSION_IDLE_SECONDS', 3600);
 
 require __DIR__ . '/helpers.php';
 require __DIR__ . '/handlers.php';
@@ -19,10 +21,22 @@ define('CRON_SECRET',   $env['CRON_SECRET'] ?? '');
 
 define('CSP_NONCE', base64_encode(random_bytes(16)));
 
-session_set_cookie_params(['secure' => true, 'samesite' => 'Lax']);
+session_set_cookie_params(['secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
 session_start();
 
-header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'nonce-" . CSP_NONCE . "'");
+header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'nonce-" . CSP_NONCE . "'; frame-ancestors 'none'");
+header('Referrer-Policy: same-origin');
+
+if (!empty($_SESSION['logged_in'])) {
+    if (isset($_SESSION['last_active']) && (time() - $_SESSION['last_active']) > SESSION_IDLE_SECONDS) {
+        session_unset();
+        session_destroy();
+        clearSessionCookie();
+        header('Location: /');
+        exit;
+    }
+    $_SESSION['last_active'] = time();
+}
 
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));

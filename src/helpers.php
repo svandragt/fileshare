@@ -25,6 +25,9 @@ function metaLockHandle(): mixed
     static $lock = null;
     if ($lock === null) {
         $lock = fopen(LOCK_FILE, 'c');
+        if ($lock === false) {
+            throw new \RuntimeException('Cannot open metadata lock file: ' . LOCK_FILE);
+        }
     }
     return $lock;
 }
@@ -39,6 +42,11 @@ function loadMeta(): array
 function saveMeta(array $meta): void
 {
     file_put_contents(DATA_FILE, json_encode(array_values($meta), JSON_PRETTY_PRINT));
+    flock(metaLockHandle(), LOCK_UN);
+}
+
+function releaseMetaLock(): void
+{
     flock(metaLockHandle(), LOCK_UN);
 }
 
@@ -97,6 +105,11 @@ function formatExpiry(?int $ts): string
 }
 
 // --- Output helpers ---
+
+function clearSessionCookie(): void
+{
+    setcookie(session_name(), '', ['expires' => 1, 'path' => '/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']);
+}
 
 function redirect(string $to, ?string $flash = null): never
 {

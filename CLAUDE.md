@@ -47,15 +47,23 @@ data/
 ## Nginx config
 
 ```nginx
-root /path/to/fileshare/src;
+server {
+    listen 443 ssl;
+    root /path/to/fileshare/src;
+    client_max_body_size 50M;  # must match MAX_UPLOAD_BYTES in index.php
 
-location / {
-    try_files $uri $uri/ /index.php$is_args$args;
-}
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
 
-location ~ \.php$ {
-    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-    include fastcgi_params;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
 }
 ```
+
+Also set `upload_max_filesize = 50M` and `post_max_size = 52M` in `php.ini`.

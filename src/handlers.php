@@ -30,6 +30,7 @@ function handleDashboard(): void
 {
     if (!isLoggedIn()) { renderLogin(); return; }
     $meta = loadMeta();
+    releaseMetaLock();
     usort($meta, fn($a, $b) => $b['uploaded'] <=> $a['uploaded']);
     renderDashboard($meta);
 }
@@ -48,7 +49,9 @@ function handleLogin(): void
 
 function handleLogout(): void
 {
+    session_unset();
     session_destroy();
+    clearSessionCookie();
     redirect('/');
 }
 
@@ -57,8 +60,17 @@ function handleUpload(): void
     requireLogin();
     verifyCsrf();
 
-    if (empty($_FILES['file']['name'])) {
-        redirect('/', 'No file selected.');
+    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        redirect('/', match ($uploadError) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File too large.',
+            UPLOAD_ERR_NO_FILE                        => 'No file selected.',
+            default                                   => 'Upload error.',
+        });
+    }
+
+    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
+        redirect('/', 'File too large (max 50 MB).');
     }
 
     $folder   = sanitizeFolder($_POST['folder'] ?? '');
@@ -104,6 +116,7 @@ function handleDownload(string $filePath): void
 {
     $filePath = ltrim($filePath, '/');
     $meta     = loadMeta();
+    releaseMetaLock();
     $idx      = findIndex($meta, $filePath);
 
     if ($idx === false) { http_response_code(404); die('File not found.'); }
@@ -130,7 +143,8 @@ function handleDownload(string $filePath): void
 
     header('X-Content-Type-Options: nosniff');
     header('Content-Type: ' . (mime_content_type($fullPath) ?: 'application/octet-stream'));
-    header('Content-Disposition: attachment; filename="' . addslashes(basename($fullPath)) . '"');
+    $safeName = preg_replace('/[\x00-\x1f\x7f"\\\\]/', '_', basename($fullPath));
+    header('Content-Disposition: attachment; filename="' . $safeName . '"');
     header('Content-Length: ' . filesize($fullPath));
     readfile($fullPath);
     exit;

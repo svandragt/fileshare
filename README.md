@@ -88,18 +88,34 @@ data/
 ## Nginx configuration
 
 ```nginx
-root /path/to/fileshare/src;
+server {
+    listen 443 ssl;
+    root /path/to/fileshare/src;
 
-location / {
-    try_files $uri $uri/ /index.php$is_args$args;
-}
+    # Match the application's 50 MB limit
+    client_max_body_size 50M;
 
-location ~ \.php$ {
-    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
-    include fastcgi_params;
-    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    # HSTS — remove max-age line and re-deploy if you ever need to revert to HTTP
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
 }
 ```
+
+> **Checklist before going live**
+> - Set `client_max_body_size` to match `MAX_UPLOAD_BYTES` (50 MB)
+> - Enable TLS and configure the `ssl_certificate` / `ssl_certificate_key` directives
+> - Add the `Strict-Transport-Security` header only after TLS is confirmed working
+> - Confirm `uploads/`, `data/`, and `.env` are outside the Nginx `root`
+> - Set `upload_max_filesize = 50M` and `post_max_size = 52M` in `php.ini`
 
 ## Cron
 
