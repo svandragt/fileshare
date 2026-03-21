@@ -37,7 +37,9 @@ function handleDashboard(): void
 function handleLogin(): void
 {
     verifyCsrf();
-    if (($_POST['username'] ?? '') === APP_USERNAME && ($_POST['password'] ?? '') === APP_PASSWORD) {
+    usleep(300_000);
+    if (($_POST['username'] ?? '') === APP_USERNAME && password_verify($_POST['password'] ?? '', APP_PASSWORD)) {
+        session_regenerate_id(true);
         $_SESSION['logged_in'] = true;
         redirect('/');
     }
@@ -126,6 +128,7 @@ function handleDownload(string $filePath): void
         die('File not found.');
     }
 
+    header('X-Content-Type-Options: nosniff');
     header('Content-Type: ' . (mime_content_type($fullPath) ?: 'application/octet-stream'));
     header('Content-Disposition: attachment; filename="' . addslashes(basename($fullPath)) . '"');
     header('Content-Length: ' . filesize($fullPath));
@@ -191,6 +194,11 @@ function handleExpiry(string $filePath): void
 
 function handleCron(): void
 {
+    if (CRON_SECRET === '' || !hash_equals(CRON_SECRET, $_GET['secret'] ?? '')) {
+        http_response_code(403);
+        die('Forbidden.');
+    }
+
     $meta    = loadMeta();
     $now     = time();
     $removed = 0;

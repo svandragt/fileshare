@@ -9,7 +9,7 @@ Single-file PHP 8.2 fileshare. No framework, no Composer dependencies.
 ## Commands
 
 - `composer serve` — start dev server at `http://localhost:8000` (uses `src/router.php` for clean URL routing)
-- `GET /cron` — trigger expiry cleanup (configure a system cron to hit this endpoint)
+- `GET /cron?secret=<CRON_SECRET>` — trigger expiry cleanup; requires `?secret=` matching `CRON_SECRET` in `.env`
 
 ## Architecture
 
@@ -23,7 +23,7 @@ src/
 uploads/          — uploaded files, mirroring user-supplied folder structure
 data/
   files.json      — metadata array: { path, private, expires (unix ts|null), uploaded }
-.env              — USERNAME and PASSWORD (copy from .env.example)
+.env              — USERNAME, PASSWORD (bcrypt hash), CRON_SECRET (copy from .env.example)
 ```
 
 **Routing** — `src/index.php` parses `REQUEST_URI` and dispatches via a `match` expression:
@@ -38,7 +38,7 @@ data/
 | `POST /delete/{path}` | Delete file |
 | `POST /toggle/{path}` | Toggle private/public |
 | `POST /expiry/{path}` | Set expiry |
-| `GET /cron` | Delete expired files |
+| `GET /cron?secret=<CRON_SECRET>` | Delete expired files (403 without valid secret) |
 
 **Path safety** — all upload/download/delete operations verify `realpath()` stays within `realpath(UPLOADS_DIR)`.
 

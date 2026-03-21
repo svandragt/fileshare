@@ -4,6 +4,7 @@ declare(strict_types=1);
 define('ROOT',        dirname(__DIR__));
 define('UPLOADS_DIR', ROOT . '/uploads');
 define('DATA_FILE',   ROOT . '/data/files.json');
+define('LOCK_FILE',   ROOT . '/data/.lock');
 define('ENV_FILE',    ROOT . '/.env');
 
 require __DIR__ . '/helpers.php';
@@ -12,10 +13,16 @@ require __DIR__ . '/handlers.php';
 // --- Bootstrap ---
 
 $env = loadEnv();
-define('APP_USERNAME', $env['USERNAME'] ?? '');
-define('APP_PASSWORD', $env['PASSWORD'] ?? '');
+define('APP_USERNAME',  $env['USERNAME']    ?? '');
+define('APP_PASSWORD',  $env['PASSWORD']    ?? '');
+define('CRON_SECRET',   $env['CRON_SECRET'] ?? '');
 
+define('CSP_NONCE', base64_encode(random_bytes(16)));
+
+session_set_cookie_params(['secure' => true, 'samesite' => 'Lax']);
 session_start();
+
+header("Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'nonce-" . CSP_NONCE . "'");
 
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));

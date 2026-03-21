@@ -31,26 +31,28 @@
         table { width: 100%; table-layout: fixed; }
         table td { vertical-align: top; padding: .5rem .4rem; }
         td.td-file { word-break: break-all; }
-        td.td-actions { width: 1%; white-space: nowrap; text-align: right; }
+        td.td-actions { white-space: nowrap; text-align: right; }
 
         /* Actions */
         .file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .35rem; align-items: center; }
-        .file-actions form { margin: 0; }
+        .file-actions form { margin: 0; display: flex; align-items: center; }
         .file-actions button { font-size: .82rem; padding: .2rem .55rem; margin: 0; }
 
         /* Expiry group: visually joined select + button */
-        .expiry-group { display: flex; align-items: stretch; }
+        .expiry-group { padding-top:0.4rem; align-items: stretch; }
         .expiry-group select {
             font-size: .82rem;
             padding: .2rem .35rem;
             border-right: none;
             border-top-right-radius: 0;
             border-bottom-right-radius: 0;
+			min-width: 4rem;
         }
         .expiry-group button {
             border-top-left-radius: 0;
             border-bottom-left-radius: 0;
         }
+
 
         @media (max-width: 480px) {
             td.td-actions { width: auto; white-space: normal; }
@@ -104,6 +106,7 @@
                 <?php foreach ($folders as $folder => $entries): ?>
                 <h3 class="folder-heading"><?= $folder !== '' ? h($folder) . '/' : 'Root' ?></h3>
                 <table>
+					<thead><tr><th>Filename</th><th>Actions</th></tr></thead>
                     <tbody>
                         <?php foreach ($entries as $entry): ?>
                         <?php $filename = basename($entry['path']); ?>
@@ -141,7 +144,7 @@
                                         </div>
                                     </form>
                                     <form method="post" action="/delete/<?= h($entry['path']) ?>"
-                                          onsubmit="return confirm('Delete <?= h(addslashes($filename)) ?>?')">
+                                          data-confirm="Delete <?= h($filename) ?>?">
                                         <?= csrfField() ?>
                                         <button type="submit">Delete</button>
                                     </form>
@@ -155,5 +158,12 @@
             <?php endif; ?>
         </section>
     </main>
+    <script nonce="<?= CSP_NONCE ?>">
+        document.querySelectorAll('form[data-confirm]').forEach(function(form) {
+            form.addEventListener('submit', function(e) {
+                if (!confirm(form.dataset.confirm)) e.preventDefault();
+            });
+        });
+    </script>
 </body>
 </html>

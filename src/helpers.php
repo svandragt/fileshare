@@ -20,8 +20,18 @@ function loadEnv(): array
 
 // --- Metadata ---
 
+function metaLockHandle(): mixed
+{
+    static $lock = null;
+    if ($lock === null) {
+        $lock = fopen(LOCK_FILE, 'c');
+    }
+    return $lock;
+}
+
 function loadMeta(): array
 {
+    flock(metaLockHandle(), LOCK_EX);
     if (!file_exists(DATA_FILE)) return [];
     return json_decode(file_get_contents(DATA_FILE), true) ?: [];
 }
@@ -29,6 +39,7 @@ function loadMeta(): array
 function saveMeta(array $meta): void
 {
     file_put_contents(DATA_FILE, json_encode(array_values($meta), JSON_PRETTY_PRINT));
+    flock(metaLockHandle(), LOCK_UN);
 }
 
 function findIndex(array $meta, string $path): int|false
