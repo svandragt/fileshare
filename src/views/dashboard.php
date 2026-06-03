@@ -113,6 +113,9 @@
                         <tr>
                             <td class="td-file">
                                 <a href="/download/<?= h($entry['path']) ?>"><?= h($filename) ?></a>
+                                <?php if (isHtmlFile($entry['path'])): ?>
+                                    <a href="/view/<?= h($entry['path']) ?>" target="_blank" rel="noopener">view</a>
+                                <?php endif; ?>
                                 <div class="badges">
                                     <?php if ($entry['private']): ?>
                                         <span class="badge badge-private">private</span>

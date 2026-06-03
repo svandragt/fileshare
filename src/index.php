@@ -54,6 +54,7 @@ match (true) {
     $path === '/logout'                                       => handleLogout(),
     $path === '/upload' && $method === 'POST'                 => handleUpload(),
     str_starts_with($path, '/download/')                      => handleDownload(substr($path, 10)),
+    str_starts_with($path, '/view/')                          => handleView(substr($path, 6)),
     str_starts_with($path, '/delete/')  && $method === 'POST' => handleDelete(substr($path, 8)),
     str_starts_with($path, '/toggle/')  && $method === 'POST' => handleToggle(substr($path, 8)),
     str_starts_with($path, '/expiry/')  && $method === 'POST' => handleExpiry(substr($path, 8)),
