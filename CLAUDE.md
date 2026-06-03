@@ -35,6 +35,7 @@ data/
 | `GET /logout` | End session |
 | `POST /upload` | Upload file |
 | `GET /download/{path}` | Serve file (403 if private and not logged in) |
+| `GET /view/{path}` | Render HTML file inline in a sandboxed page (404 for non-HTML) |
 | `POST /delete/{path}` | Delete file |
 | `POST /toggle/{path}` | Toggle private/public |
 | `POST /expiry/{path}` | Set expiry |

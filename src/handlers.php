@@ -112,7 +112,7 @@ function handleUpload(): void
     redirect('/', 'File uploaded successfully.');
 }
 
-function handleDownload(string $filePath): void
+function resolveServableFile(string $filePath): string
 {
     $filePath = ltrim($filePath, '/');
     $meta     = loadMeta();
@@ -141,10 +141,42 @@ function handleDownload(string $filePath): void
         die('File not found.');
     }
 
+    return $fullPath;
+}
+
+function isHtmlFile(string $path): bool
+{
+    return in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), ['html', 'htm'], true);
+}
+
+function handleDownload(string $filePath): void
+{
+    $fullPath = resolveServableFile($filePath);
+
     header('X-Content-Type-Options: nosniff');
     header('Content-Type: ' . (mime_content_type($fullPath) ?: 'application/octet-stream'));
     $safeName = preg_replace('/[\x00-\x1f\x7f"\\\\]/', '_', basename($fullPath));
     header('Content-Disposition: attachment; filename="' . $safeName . '"');
+    header('Content-Length: ' . filesize($fullPath));
+    readfile($fullPath);
+    exit;
+}
+
+function handleView(string $filePath): void
+{
+    $fullPath = resolveServableFile($filePath);
+
+    if (!isHtmlFile($fullPath)) {
+        http_response_code(404);
+        die('File not found.');
+    }
+
+    // Sandbox without allow-same-origin: page runs in an opaque origin,
+    // so uploaded HTML cannot read the session cookie or call the app as us.
+    header('Content-Security-Policy: sandbox allow-scripts');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Type: text/html; charset=utf-8');
+    header('Content-Disposition: inline');
     header('Content-Length: ' . filesize($fullPath));
     readfile($fullPath);
     exit;
