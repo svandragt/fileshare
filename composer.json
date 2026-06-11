@@ -1,8 +1,12 @@
 {
     "scripts": {
-        "serve": "php -S localhost:8000 -t src/ src/router.php"
+        "serve": "php -S localhost:8000 -t src/ src/router.php",
+        "test": "vendor/bin/phpunit"
     },
     "require": {
         "ext-fileinfo": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11"
     }
 }
