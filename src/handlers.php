@@ -55,28 +55,17 @@ function handleLogout(): void
     redirect('/');
 }
 
-function handleUpload(): void
+/**
+ * Moves an uploaded file into UPLOADS_DIR/{folder}, auto-renaming on
+ * collision. Shared by the session-based /upload and token-based
+ * /api/upload handlers, which differ only in auth and response format.
+ *
+ * @return array{ok: bool, path?: string, error?: string}
+ */
+function saveUploadedFile(string $folderInput, string $originalFilename, string $tmpName): array
 {
-    requireLogin();
-    verifyCsrf();
-
-    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
-    if ($uploadError !== UPLOAD_ERR_OK) {
-        redirect('/', match ($uploadError) {
-            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File too large.',
-            UPLOAD_ERR_NO_FILE                        => 'No file selected.',
-            default                                   => 'Upload error.',
-        });
-    }
-
-    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
-        redirect('/', 'File too large (max 50 MB).');
-    }
-
-    $folder   = sanitizeFolder($_POST['folder'] ?? '');
-    $private  = !empty($_POST['private']);
-    $expiry   = $_POST['expiry'] ?? 'never';
-    $filename = basename($_FILES['file']['name']);
+    $folder   = sanitizeFolder($folderInput);
+    $filename = basename($originalFilename);
 
     $targetDir = UPLOADS_DIR . ($folder !== '' ? '/' . $folder : '');
 
@@ -89,27 +78,107 @@ function handleUpload(): void
     $uploadsReal   = realpath(UPLOADS_DIR);
     $targetDirReal = realpath($targetDir);
     if ($targetDirReal === false || !str_starts_with($targetDirReal, $uploadsReal)) {
-        redirect('/', 'Invalid folder path.');
+        return ['ok' => false, 'error' => 'Invalid folder path.'];
     }
 
     $filename = autoRename($targetDir, $filename);
 
-    if (!move_uploaded_file($_FILES['file']['tmp_name'], $targetDir . '/' . $filename)) {
-        redirect('/', 'Upload failed.');
+    if (!move_uploaded_file($tmpName, $targetDir . '/' . $filename)) {
+        return ['ok' => false, 'error' => 'Upload failed.'];
     }
 
-    $relativePath = ($folder !== '' ? $folder . '/' : '') . $filename;
+    return ['ok' => true, 'path' => ($folder !== '' ? $folder . '/' : '') . $filename];
+}
+
+function uploadErrorMessage(int $uploadError): string
+{
+    return match ($uploadError) {
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File too large.',
+        UPLOAD_ERR_NO_FILE                        => 'No file received.',
+        default                                   => 'Upload error.',
+    };
+}
+
+function handleUpload(): void
+{
+    requireLogin();
+    verifyCsrf();
+
+    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        redirect('/', uploadErrorMessage($uploadError));
+    }
+
+    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
+        redirect('/', 'File too large (max 50 MB).');
+    }
+
+    $result = saveUploadedFile($_POST['folder'] ?? '', $_FILES['file']['name'], $_FILES['file']['tmp_name']);
+    if (!$result['ok']) {
+        redirect('/', $result['error']);
+    }
 
     $meta   = loadMeta();
     $meta[] = [
-        'path'     => $relativePath,
-        'private'  => $private,
-        'expires'  => expiryTimestamp($expiry),
+        'path'     => $result['path'],
+        'private'  => !empty($_POST['private']),
+        'expires'  => expiryTimestamp($_POST['expiry'] ?? 'never'),
         'uploaded' => time(),
     ];
     saveMeta($meta);
 
     redirect('/', 'File uploaded successfully.');
+}
+
+function handleApiUpload(): void
+{
+    header('Content-Type: application/json');
+
+    $token = '';
+    if (preg_match('/^Bearer\s+(.+)$/i', $_SERVER['HTTP_AUTHORIZATION'] ?? '', $m)) {
+        $token = $m[1];
+    }
+    if (API_UPLOAD_SECRET === '' || !hash_equals(API_UPLOAD_SECRET, $token)) {
+        http_response_code(403);
+        echo json_encode(['error' => 'Forbidden.']);
+        exit;
+    }
+
+    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        http_response_code(400);
+        echo json_encode(['error' => uploadErrorMessage($uploadError)]);
+        exit;
+    }
+
+    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
+        http_response_code(400);
+        echo json_encode(['error' => 'File too large.']);
+        exit;
+    }
+
+    $result = saveUploadedFile($_POST['folder'] ?? '', $_FILES['file']['name'], $_FILES['file']['tmp_name']);
+    if (!$result['ok']) {
+        http_response_code(400);
+        echo json_encode(['error' => $result['error']]);
+        exit;
+    }
+
+    $meta   = loadMeta();
+    $meta[] = [
+        'path'     => $result['path'],
+        'private'  => !empty($_POST['private']),
+        'expires'  => expiryTimestamp($_POST['expiry'] ?? 'never'),
+        'uploaded' => time(),
+    ];
+    saveMeta($meta);
+
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    echo json_encode([
+        'path' => $result['path'],
+        'url'  => $scheme . '://' . $_SERVER['HTTP_HOST'] . '/download/' . $result['path'],
+    ]);
+    exit;
 }
 
 function resolveServableFile(string $filePath): string
