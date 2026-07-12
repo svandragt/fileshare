@@ -17,6 +17,7 @@ $env = loadEnv();
 define('APP_USERNAME',      $env['USERNAME']      ?? '');
 define('APP_PASSWORD',      $env['PASSWORD']      ?? '');
 define('CRON_SECRET',       $env['CRON_SECRET']   ?? '');
+define('API_UPLOAD_SECRET', $env['API_UPLOAD_SECRET'] ?? '');
 define('MAX_UPLOAD_BYTES',  (int)($env['MAX_UPLOAD_MB'] ?? 50) * 1024 * 1024);
 
 define('CSP_NONCE', base64_encode(random_bytes(16)));
@@ -53,6 +54,7 @@ match (true) {
     $path === '/login'  && $method === 'POST'                 => handleLogin(),
     $path === '/logout'                                       => handleLogout(),
     $path === '/upload' && $method === 'POST'                 => handleUpload(),
+    $path === '/api/upload' && $method === 'POST'              => handleApiUpload(),
     str_starts_with($path, '/download/')                      => handleDownload(substr($path, 10)),
     str_starts_with($path, '/view/')                          => handleView(substr($path, 6)),
     str_starts_with($path, '/delete/')  && $method === 'POST' => handleDelete(substr($path, 8)),
