@@ -9,15 +9,18 @@ Single-file PHP 8.2 fileshare. No framework, no Composer dependencies.
 ## Commands
 
 - `composer serve` — start dev server at `http://localhost:8000` (uses `src/router.php` for clean URL routing)
-- `GET /cron?secret=<CRON_SECRET>` — trigger expiry cleanup; requires `?secret=` matching `CRON_SECRET` in `.env`
+- `GET /cron` — trigger expiry cleanup; requires an `X-Cron-Secret` header (or legacy `?secret=`) matching `CRON_SECRET` in `.env`
 
 ## Architecture
 
-All application logic lives in `src/index.php`. The webroot is `src/`, so everything outside it (`uploads/`, `data/`, `.env`) is not web-accessible.
+The webroot is `src/`, so everything outside it (`uploads/`, `data/`, `.env`) is not web-accessible.
 
 ```
 src/
-  index.php       — router, handlers, and HTML views
+  index.php       — config, bootstrap, and the routing match expression
+  handlers.php    — one handler function per route
+  helpers.php     — metadata, auth, and path-safety helpers
+  views/          — HTML templates
   router.php      — PHP built-in server router (dev only)
   simple.min.css  — local copy of Simple CSS
 uploads/          — uploaded files, mirroring user-supplied folder structure
@@ -39,7 +42,7 @@ data/
 | `POST /delete/{path}` | Delete file |
 | `POST /toggle/{path}` | Toggle private/public |
 | `POST /expiry/{path}` | Set expiry |
-| `GET /cron?secret=<CRON_SECRET>` | Delete expired files (403 without valid secret) |
+| `GET /cron` | Delete expired files (403 without valid secret) |
 
 **Path safety** — all upload/download/delete operations verify `realpath()` stays within `realpath(UPLOADS_DIR)`.
 

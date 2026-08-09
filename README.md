@@ -87,7 +87,7 @@ data/
 | `POST` | `/delete/{path}` | Delete a file |
 | `POST` | `/toggle/{path}` | Toggle public/private |
 | `POST` | `/expiry/{path}` | Set or update expiry |
-| `GET` | `/cron?secret=<CRON_SECRET>` | Delete expired files (403 without valid secret) |
+| `GET` | `/cron` | Delete expired files (403 without a valid `X-Cron-Secret` header or `?secret=` parameter) |
 
 ## Nginx configuration
 
@@ -121,15 +121,47 @@ server {
 > - Confirm `uploads/`, `data/`, and `.env` are outside the Nginx `root`
 > - Confirm `uploads/` and `data/` are writable by the PHP-FPM user (`chown www-data: uploads data`)
 > - Set `upload_max_filesize = 50M` and `post_max_size = 52M` in `php.ini`
+> - Do not add a browser-caching block such as `location ~* \.(jpg|css|js)$`. A regex location takes precedence over the `location /` prefix match, so `/download/photo.jpg` is looked up on disk instead of reaching `index.php`, and returns 404.
 
 ## Cron
 
-Set up a system cron to trigger expiry cleanup. The `CRON_SECRET` from `.env` is required as a query parameter:
+Set up a system cron to trigger expiry cleanup. Pass the `CRON_SECRET` from `.env` in the `X-Cron-Secret` header:
 
 ```
 # Run expiry cleanup every hour
-0 * * * * curl -s "https://example.com/cron?secret=<CRON_SECRET>"
+0 * * * * curl -s -H "X-Cron-Secret: <CRON_SECRET>" https://example.com/cron
 ```
+
+Read the secret from a root-only file rather than writing it into the crontab:
+
+```
+0 * * * * curl -s -H "X-Cron-Secret: $(cat /etc/fileshare-cron-secret)" https://example.com/cron
+```
+
+The endpoint also accepts `?secret=<CRON_SECRET>` for existing deployments, but avoid it: query strings are recorded in the crontab, the Nginx access log, and any proxy log in between. Treat any secret used that way as exposed and rotate it.
+
+### Rotate the cron secret
+
+Rotate whenever the secret has been sent as a query parameter, has appeared in a log or crontab, or when someone with server access leaves. Cleanup stops running between steps 2 and 3, so the only cost of a mistake is a delayed cleanup, not lost files.
+
+1. Generate a new secret:
+
+   ```
+   php -r "echo bin2hex(random_bytes(32));"
+   ```
+
+2. Write it to `CRON_SECRET` in `.env`. No restart is needed — `.env` is read on every request.
+
+3. Update the caller with the same value: edit the crontab entry, or write the new secret to `/etc/fileshare-cron-secret` if you use the file form.
+
+4. Confirm the new secret works and the old one does not:
+
+   ```
+   curl -s -o /dev/null -w '%{http_code}\n' -H "X-Cron-Secret: <new-secret>" https://example.com/cron  # 200
+   curl -s -o /dev/null -w '%{http_code}\n' -H "X-Cron-Secret: <old-secret>" https://example.com/cron  # 403
+   ```
+
+If the secret leaked through a URL, also purge or rotate the Nginx access logs that recorded it.
 
 ## Security notes
 

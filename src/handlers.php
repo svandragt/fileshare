@@ -309,7 +309,10 @@ function handleExpiry(string $filePath): void
 
 function handleCron(): void
 {
-    if (CRON_SECRET === '' || !hash_equals(CRON_SECRET, $_GET['secret'] ?? '')) {
+    // Header is preferred: query strings end up in access logs and crontabs.
+    $given = $_SERVER['HTTP_X_CRON_SECRET'] ?? $_GET['secret'] ?? '';
+
+    if (CRON_SECRET === '' || !hash_equals(CRON_SECRET, $given)) {
         http_response_code(403);
         die('Forbidden.');
     }
