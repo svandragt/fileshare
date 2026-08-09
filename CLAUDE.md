@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Single-file PHP 8.2 fileshare. No framework, no Composer dependencies.
+PHP 8.2 fileshare. No framework, no Composer, no database — the only requirement is PHP with `ext-fileinfo`.
 
 ## Commands
 
-- `composer serve` — start dev server at `http://localhost:8000` (uses `src/router.php` for clean URL routing)
+- `php -S localhost:8000 -t src/ src/router.php` — start dev server (uses `src/router.php` for clean URL routing)
+- `php tests/smoke.php` — run the smoke test; no framework, exits non-zero on failure
 - `GET /cron` — trigger expiry cleanup; requires an `X-Cron-Secret` header (or legacy `?secret=`) matching `CRON_SECRET` in `.env`
 
 ## Architecture
