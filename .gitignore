@@ -1,3 +1,8 @@
 /data/files.json
 /data/.lock
 .env
+/uploads/*
+!/uploads/.gitkeep
+/vendor/
+/.phpunit.result.cache
+/.idea/
