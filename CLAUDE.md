@@ -8,8 +8,11 @@ PHP 8.2 fileshare. No framework, no Composer, no database — the only requireme
 
 ## Commands
 
-- `php -S localhost:8000 -t src/ src/router.php` — start dev server (uses `src/router.php` for clean URL routing)
-- `php tests/smoke.php` — run the smoke test; no framework, exits non-zero on failure
+- `make serve` — start dev server at `http://localhost:8000` (override with `PORT=8080`; uses `src/router.php` for clean URL routing)
+- `make test` — run the smoke test; no framework, exits non-zero on failure
+- `make lint` — syntax-check every PHP file
+- `make check` — lint and test, the same commands CI runs
+- `make help` — list the targets
 - `GET /cron` — trigger expiry cleanup; requires an `X-Cron-Secret` header (or legacy `?secret=`) matching `CRON_SECRET` in `.env`
 
 ## Architecture

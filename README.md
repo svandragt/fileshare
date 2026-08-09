@@ -52,8 +52,14 @@ chown www-data: uploads data   # replace www-data with your PHP-FPM user if diff
 ## Development server
 
 ```bash
-php -S localhost:8000 -t src/ src/router.php
+make serve
 # → http://localhost:8000
+```
+
+To use a different port, set `PORT`:
+
+```bash
+make serve PORT=8080
 ```
 
 ## Tests
@@ -61,7 +67,8 @@ php -S localhost:8000 -t src/ src/router.php
 The project has no dependencies and no test framework. Run the smoke test with PHP alone:
 
 ```bash
-php tests/smoke.php
+make test     # or: php tests/smoke.php
+make check    # lint and test, the same commands CI runs
 ```
 
 It copies the app to a temporary directory, starts the built-in server against that copy, and exercises the cron endpoint. Your real `.env`, `uploads/`, and `data/` are never touched.

@@ -12,7 +12,5 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-      - name: Lint
-        run: find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
-      - name: Smoke test
-        run: php tests/smoke.php
+      - name: Lint and test
+        run: make check
