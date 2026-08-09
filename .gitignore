@@ -1,3 +1,6 @@
 /data/files.json
 /data/.lock
 .env
+/uploads/*
+!/uploads/.gitkeep
+/.idea/

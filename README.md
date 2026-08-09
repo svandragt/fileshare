@@ -1,6 +1,6 @@
 # Fileshare
 
-A self-hosted file sharing app in a single PHP file. No framework, no Composer dependencies, no database.
+A self-hosted file sharing app in plain PHP. No framework, no Composer, no database — the only requirement is PHP with `ext-fileinfo`.
 
 <img width="1698" height="1014" alt="image" src="https://github.com/user-attachments/assets/81d5e234-25a7-44a6-9332-623a15235fe9" />
 
@@ -52,9 +52,26 @@ chown www-data: uploads data   # replace www-data with your PHP-FPM user if diff
 ## Development server
 
 ```bash
-composer serve
+make serve
 # → http://localhost:8000
 ```
+
+To use a different port, set `PORT`:
+
+```bash
+make serve PORT=8080
+```
+
+## Tests
+
+The project has no dependencies and no test framework. Run the smoke test with PHP alone:
+
+```bash
+make test     # or: php tests/smoke.php
+make check    # lint and test, the same commands CI runs
+```
+
+It copies the app to a temporary directory, starts the built-in server against that copy, and exercises the cron endpoint. Your real `.env`, `uploads/`, and `data/` are never touched.
 
 ## Project structure
 
