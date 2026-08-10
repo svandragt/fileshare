@@ -41,6 +41,7 @@ data/
 | `POST /login` | Authenticate |
 | `GET /logout` | End session |
 | `POST /upload` | Upload file |
+| `POST /api/upload` | Upload file with `Authorization: Bearer $API_UPLOAD_SECRET`; JSON reply, `{error, max_bytes}` on a size rejection |
 | `GET /download/{path}` | Serve file (403 if private and not logged in) |
 | `GET /view/{path}` | Render HTML file inline in a sandboxed page (404 for non-HTML) |
 | `POST /delete/{path}` | Delete file |
