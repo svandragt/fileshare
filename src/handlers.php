@@ -267,6 +267,21 @@ function handleView(string $filePath): void
     exit;
 }
 
+/**
+ * Index of $filePath in $meta, or bail out. loadMeta() holds LOCK_EX and only
+ * saveMeta() drops it, so a miss has to release the lock itself — and say so,
+ * otherwise a no-op looks exactly like a success.
+ */
+function requireEntry(array $meta, string $filePath): int
+{
+    $idx = findIndex($meta, $filePath);
+    if ($idx === false) {
+        releaseMetaLock();
+        redirect('/', 'File not found.');
+    }
+    return $idx;
+}
+
 function handleDelete(string $filePath): void
 {
     requireLogin();
@@ -274,17 +289,15 @@ function handleDelete(string $filePath): void
 
     $filePath = ltrim($filePath, '/');
     $meta     = loadMeta();
-    $idx      = findIndex($meta, $filePath);
+    $idx      = requireEntry($meta, $filePath);
 
-    if ($idx !== false) {
-        $uploadsReal = realpath(UPLOADS_DIR);
-        $fullPath    = realpath(UPLOADS_DIR . '/' . $filePath);
-        if ($fullPath !== false && str_starts_with($fullPath, $uploadsReal) && is_file($fullPath)) {
-            unlink($fullPath);
-        }
-        array_splice($meta, $idx, 1);
-        saveMeta($meta);
+    $uploadsReal = realpath(UPLOADS_DIR);
+    $fullPath    = realpath(UPLOADS_DIR . '/' . $filePath);
+    if ($fullPath !== false && str_starts_with($fullPath, $uploadsReal) && is_file($fullPath)) {
+        unlink($fullPath);
     }
+    array_splice($meta, $idx, 1);
+    saveMeta($meta);
 
     redirect('/');
 }
@@ -296,12 +309,10 @@ function handleToggle(string $filePath): void
 
     $filePath = ltrim($filePath, '/');
     $meta     = loadMeta();
-    $idx      = findIndex($meta, $filePath);
+    $idx      = requireEntry($meta, $filePath);
 
-    if ($idx !== false) {
-        $meta[$idx]['private'] = !$meta[$idx]['private'];
-        saveMeta($meta);
-    }
+    $meta[$idx]['private'] = !$meta[$idx]['private'];
+    saveMeta($meta);
 
     redirect('/');
 }
@@ -311,14 +322,18 @@ function handleExpiry(string $filePath): void
     requireLogin();
     verifyCsrf();
 
+    // "Keep" — the select cannot preselect the stored expiry (it is an absolute
+    // timestamp matching no preset), so an untouched dropdown means no change.
+    if (($_POST['expiry'] ?? '') === '') {
+        redirect('/');
+    }
+
     $filePath = ltrim($filePath, '/');
     $meta     = loadMeta();
-    $idx      = findIndex($meta, $filePath);
+    $idx      = requireEntry($meta, $filePath);
 
-    if ($idx !== false) {
-        $meta[$idx]['expires'] = expiryTimestamp($_POST['expiry'] ?? 'never');
-        saveMeta($meta);
-    }
+    $meta[$idx]['expires'] = expiryTimestamp($_POST['expiry']);
+    saveMeta($meta);
 
     redirect('/');
 }

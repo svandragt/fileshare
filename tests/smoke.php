@@ -34,7 +34,9 @@ mkdir($tmp . '/data', 0777, true);
 mkdir($tmp . '/uploads', 0777, true);
 exec(sprintf('cp -r %s %s', escapeshellarg($root . '/src'), escapeshellarg($tmp . '/src')));
 $apiSecret = 'api-secret-' . bin2hex(random_bytes(8));
-file_put_contents($tmp . '/.env', "USERNAME=test\nPASSWORD=x\nCRON_SECRET=$secret\nAPI_UPLOAD_SECRET=$apiSecret\nMAX_UPLOAD_MB=50\n");
+$password  = 'pw-' . bin2hex(random_bytes(8));
+$hash      = password_hash($password, PASSWORD_DEFAULT);
+file_put_contents($tmp . '/.env', "USERNAME=test\nPASSWORD=$hash\nCRON_SECRET=$secret\nAPI_UPLOAD_SECRET=$apiSecret\nMAX_UPLOAD_MB=50\n");
 
 // An already-expired file, so cron has something real to delete. Every cron
 // request consumes this, so re-seed before any assertion that depends on it.
@@ -100,14 +102,67 @@ function postFile(string $url, string $filename, string $contents, array $header
     ]);
 }
 
-/** @return array{0:int,1:string} status code and body */
+/** @return array{0:int,1:string,2:string[]} status code, body, response headers */
 function request(string $url, array $http): array
 {
     $body = @file_get_contents($url, false, stream_context_create([
-        'http' => $http + ['ignore_errors' => true],
+        'http' => $http + ['ignore_errors' => true, 'follow_location' => 0],
     ])) ?: '';
-    preg_match('{ (\d{3}) }', $http_response_header[0] ?? '', $m);
-    return [(int)($m[1] ?? 0), $body];
+    $headers = $http_response_header ?? [];
+    preg_match('{ (\d{3}) }', $headers[0] ?? '', $m);
+    return [(int)($m[1] ?? 0), $body, $headers];
+}
+
+/**
+ * Logged-in browser: replays the session cookie and the CSRF token, so the
+ * dashboard's own forms can be exercised as a user submits them.
+ */
+final class Browser
+{
+    private string $cookie = '';
+    private string $csrf   = '';
+
+    public function __construct(private string $base) {}
+
+    public function login(string $user, string $password): void
+    {
+        $this->get('/');
+        $this->post('/login', ['username' => $user, 'password' => $password]);
+        $this->get('/');
+    }
+
+    /** @return array{0:int,1:string} */
+    public function get(string $path): array
+    {
+        [$code, $body, $headers] = request($this->base . $path, ['header' => $this->headers()]);
+        $this->absorb($headers, $body);
+        return [$code, $body];
+    }
+
+    /** @return array{0:int,1:string} */
+    public function post(string $path, array $fields): array
+    {
+        [$code, $body, $headers] = request($this->base . $path, [
+            'method'  => 'POST',
+            'header'  => array_merge($this->headers(), ['Content-Type: application/x-www-form-urlencoded']),
+            'content' => http_build_query($fields + ['csrf' => $this->csrf]),
+        ]);
+        $this->absorb($headers, $body);
+        return [$code, $body];
+    }
+
+    private function headers(): array
+    {
+        return $this->cookie === '' ? [] : ["Cookie: {$this->cookie}"];
+    }
+
+    private function absorb(array $headers, string $body): void
+    {
+        foreach ($headers as $header) {
+            if (preg_match('/^Set-Cookie:\s*([^;]+)/i', $header, $m)) $this->cookie = $m[1];
+        }
+        if (preg_match('/name="csrf" value="([^"]+)"/', $body, $m)) $this->csrf = $m[1];
+    }
 }
 
 $base = boot($tmp);
@@ -170,6 +225,55 @@ check('missing file is still reported as such', true, str_contains(
     'No file received'
 ));
 check('bad token is still rejected', 403, postFile("$clamped/api/upload", 'x.bin', 'x', ['Authorization: Bearer wrong'])[0]);
+
+// --- Dashboard row actions ---
+//
+// The expiry select cannot preselect a stored absolute timestamp, so its
+// default must be a no-op. It used to default to "Never", which meant
+// submitting the row untouched silently cleared the file's expiry.
+
+echo "dashboard row actions\n";
+$seed();
+// By path, and no ?? — a stored null is a real value here, not a missing one.
+$expiry = static function () use ($tmp) {
+    foreach (json_decode(file_get_contents($tmp . '/data/files.json'), true) as $entry) {
+        if ($entry['path'] === 'kept.txt') return $entry['expires'];
+    }
+    return 'missing';
+};
+
+$browser = new Browser($base);
+$browser->login('test', $password);
+check('login lands on the dashboard', true, str_contains($browser->get('/')[1], 'Set expiry'));
+
+$browser->post('/expiry/kept.txt', ['expiry' => '7d']);
+$sevenDays = $expiry();
+check('an explicit expiry is stored', true, is_int($sevenDays) && abs($sevenDays - (time() + 86_400 * 7)) < 60);
+
+$browser->post('/expiry/kept.txt', ['expiry' => '']);
+check('submitting the untouched dropdown keeps the expiry', $sevenDays, $expiry());
+
+$browser->post('/expiry/kept.txt', ['expiry' => 'never']);
+check('choosing Never still clears it', null, $expiry());
+
+check('a missing file reports itself instead of failing silently', true, str_contains(
+    $browser->post('/expiry/ghost.txt', ['expiry' => '1h'])[1] . $browser->get('/')[1],
+    'File not found.'
+));
+check('a missing file did not release the lock into a wedged state', true, str_contains(
+    $browser->get('/')[1],
+    'kept.txt'
+));
+
+$browser->post('/toggle/kept.txt', []);
+check('toggle still flips private', true, json_decode(file_get_contents($tmp . '/data/files.json'), true)[1]['private']);
+
+$browser->post('/delete/kept.txt', []);
+check('delete still removes the file', false, file_exists($tmp . '/uploads/kept.txt'));
+check('delete still removes the metadata entry', false, in_array('kept.txt', array_column(
+    json_decode(file_get_contents($tmp . '/data/files.json'), true),
+    'path'
+), true));
 
 echo $failures === 0 ? "\nPASS\n" : "\n$failures FAILED\n";
 exit($failures === 0 ? 0 : 1);
