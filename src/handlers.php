@@ -90,10 +90,31 @@ function saveUploadedFile(string $folderInput, string $originalFilename, string 
     return ['ok' => true, 'path' => ($folder !== '' ? $folder . '/' : '') . $filename];
 }
 
+/**
+ * The single verdict on this request's upload, folding the app's own size
+ * guard into PHP's UPLOAD_ERR_* codes so both handlers agree on the limit.
+ */
+function uploadError(): int
+{
+    $error = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+
+    // A body over post_max_size arrives with $_FILES empty and no error set,
+    // which otherwise reads as "no file received".
+    if ($error === UPLOAD_ERR_NO_FILE && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > phpIniBytes('post_max_size')) {
+        return UPLOAD_ERR_INI_SIZE;
+    }
+
+    if ($error === UPLOAD_ERR_OK && $_FILES['file']['size'] > effectiveMaxUploadBytes()) {
+        return UPLOAD_ERR_FORM_SIZE;
+    }
+
+    return $error;
+}
+
 function uploadErrorMessage(int $uploadError): string
 {
     return match ($uploadError) {
-        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File too large.',
+        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File too large (max ' . formatBytes(effectiveMaxUploadBytes()) . ').',
         UPLOAD_ERR_NO_FILE                        => 'No file received.',
         default                                   => 'Upload error.',
     };
@@ -102,16 +123,15 @@ function uploadErrorMessage(int $uploadError): string
 function handleUpload(): void
 {
     requireLogin();
-    verifyCsrf();
 
-    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    // Before the CSRF check: a body over post_max_size empties $_POST too, so
+    // the token is missing and "Invalid CSRF token." would mask the real cause.
+    $uploadError = uploadError();
     if ($uploadError !== UPLOAD_ERR_OK) {
         redirect('/', uploadErrorMessage($uploadError));
     }
 
-    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
-        redirect('/', 'File too large (max 50 MB).');
-    }
+    verifyCsrf();
 
     $result = saveUploadedFile($_POST['folder'] ?? '', $_FILES['file']['name'], $_FILES['file']['tmp_name']);
     if (!$result['ok']) {
@@ -144,16 +164,12 @@ function handleApiUpload(): void
         exit;
     }
 
-    $uploadError = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
+    $uploadError = uploadError();
     if ($uploadError !== UPLOAD_ERR_OK) {
         http_response_code(400);
-        echo json_encode(['error' => uploadErrorMessage($uploadError)]);
-        exit;
-    }
-
-    if ($_FILES['file']['size'] > MAX_UPLOAD_BYTES) {
-        http_response_code(400);
-        echo json_encode(['error' => 'File too large.']);
+        echo json_encode(['error' => uploadErrorMessage($uploadError)]
+            + (in_array($uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                ? ['max_bytes' => effectiveMaxUploadBytes()] : []));
         exit;
     }
 
