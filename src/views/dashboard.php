@@ -135,6 +135,10 @@
                                         <?= csrfField() ?>
                                         <div class="expiry-group">
                                             <select name="expiry">
+                                                <!-- Default to a no-op: the stored expiry is an absolute
+                                                     timestamp, so no option can be preselected to match it,
+                                                     and an untouched dropdown must not clear it. -->
+                                                <option value="">Keep</option>
                                                 <option value="never">Never</option>
                                                 <option value="1h">1h</option>
                                                 <option value="6h">6h</option>
